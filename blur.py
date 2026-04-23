@@ -6,10 +6,15 @@ The degradation model is:  g = h * f + n
   h : PSF kernel (describes the blur)
   f : original clean image
   n : additive Gaussian noise
+
+DFT operations are performed with cv2.dft / cv2.idft.  cv2.dft returns a
+two-channel float64 array [H, W, 2] whose channels are the real and imaginary
+parts.  We convert that to a numpy complex128 array for arithmetic, then pack
+it back to two channels before calling cv2.idft.
 """
 
+import cv2
 import numpy as np
-import tensorflow as tf
 from scipy.ndimage import rotate
 
 
@@ -47,10 +52,10 @@ def create_motion_blur_psf(length: int = 15, angle: float = 0, size: int = None)
     return kernel
 
 
-def _psf_to_otf(psf: np.ndarray, image_shape: tuple) -> tf.Tensor:
+def _psf_to_otf(psf: np.ndarray, image_shape: tuple) -> np.ndarray:
     """
     Pad the PSF to the image dimensions and compute its Optical Transfer
-    Function (OTF) via FFT.
+    Function (OTF) via cv2.dft().
 
     The PSF is placed at the top-left corner, then circularly shifted so
     that its centre sits at position (0, 0), which is the FFT convention
@@ -60,17 +65,19 @@ def _psf_to_otf(psf: np.ndarray, image_shape: tuple) -> tf.Tensor:
         psf         : 2-D PSF kernel.
         image_shape : (H, W) of the target image.
     Returns:
-        OTF as a complex128 TensorFlow tensor of shape image_shape.
+        OTF as a complex128 numpy array of shape image_shape.
     """
     psf_padded = np.zeros(image_shape, dtype=np.float64)
     ph, pw = psf.shape
     psf_padded[:ph, :pw] = psf
 
-    # Circular shift: move PSF centre to (0, 0) for correct FFT phase
+    # Circular shift: move PSF centre to index (0, 0) for correct FFT phase
     psf_padded = np.roll(psf_padded, -(ph // 2), axis=0)
     psf_padded = np.roll(psf_padded, -(pw // 2), axis=1)
 
-    return tf.signal.fft2d(tf.cast(psf_padded, tf.complex128))
+    # cv2.dft produces a 2-channel [H, W, 2] array: channel 0 = real, 1 = imag
+    dft_result = cv2.dft(psf_padded, flags=cv2.DFT_COMPLEX_OUTPUT)
+    return dft_result[..., 0] + 1j * dft_result[..., 1]
 
 
 def apply_motion_blur(image: np.ndarray, psf: np.ndarray) -> np.ndarray:
@@ -86,11 +93,19 @@ def apply_motion_blur(image: np.ndarray, psf: np.ndarray) -> np.ndarray:
     Returns:
         blurred : 2-D float64 array in [0, 1].
     """
-    G  = tf.signal.fft2d(tf.cast(image, tf.complex128))   # Image spectrum
-    H  = _psf_to_otf(psf, image.shape)                    # PSF spectrum (OTF)
+    # Forward DFT — cv2.dft requires float64 input; returns [H, W, 2]
+    G_2ch = cv2.dft(image.astype(np.float64), flags=cv2.DFT_COMPLEX_OUTPUT)
+    G     = G_2ch[..., 0] + 1j * G_2ch[..., 1]   # complex image spectrum
+    H     = _psf_to_otf(psf, image.shape)           # OTF (complex)
 
-    # Convolution theorem: multiply spectra, then invert
-    blurred = tf.math.real(tf.signal.ifft2d(G * H)).numpy()
+    # Convolution theorem: pointwise multiply spectra, then invert
+    GH = G * H
+
+    # Pack complex result back to [H, W, 2] for cv2.idft
+    GH_2ch = np.stack([GH.real, GH.imag], axis=-1)
+
+    # DFT_SCALE divides by N*M; DFT_REAL_OUTPUT discards the zero imaginary part
+    blurred = cv2.idft(GH_2ch, flags=cv2.DFT_SCALE | cv2.DFT_REAL_OUTPUT)
     return np.clip(blurred, 0.0, 1.0)
 
 

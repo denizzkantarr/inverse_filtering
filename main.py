@@ -6,21 +6,17 @@ Pipeline
   1. Load the standard 512×512 'cameraman' grayscale test image.
   2. Simulate horizontal motion blur with a PSF of configurable length/angle.
   3. Add Gaussian noise to the blurred image (realistic degradation model).
-  4. Restore with the regularised inverse filter  (TensorFlow FFT).
-  5. Restore with the Wiener filter               (TensorFlow FFT).
+  4. Restore with the regularised inverse filter  (OpenCV DFT).
+  5. Restore with the Wiener filter               (OpenCV DFT).
   6. Save comparison figures and print quality metrics (PSNR, SSIM).
 
 All parameters are grouped at the top of main() for easy experimentation.
 
-Dependencies: tensorflow, numpy, scikit-image, scipy, matplotlib
+Dependencies: opencv-python, numpy, scikit-image, scipy, matplotlib
 """
 
 import os
 import numpy as np
-
-# Suppress TensorFlow info/warning logs for cleaner output
-os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
-import tensorflow as tf
 
 from blur    import create_motion_blur_psf, apply_motion_blur, add_gaussian_noise
 from restore import inverse_filter, wiener_filter
@@ -109,7 +105,7 @@ def main() -> None:
         filename="results/full_comparison.png",
     )
 
-    # Frequency-domain spectra
+    # Frequency-domain spectra (computed via cv2.dft inside save_frequency_magnitude)
     save_frequency_magnitude(image,           "results/spectrum_original.png",  "Spectrum — Original")
     save_frequency_magnitude(noisy_blurred,   "results/spectrum_blurred.png",   "Spectrum — Blurred + Noise")
     save_frequency_magnitude(wiener_restored, "results/spectrum_wiener.png",    "Spectrum — Wiener Restored")

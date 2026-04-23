@@ -2,7 +2,7 @@
 
 **CENG 503 — Homework 2**
 
-This project simulates motion blur on a grayscale image and restores it using two classical frequency-domain methods implemented with **TensorFlow FFT**.
+This project simulates motion blur on a grayscale image and restores it using two classical frequency-domain methods implemented with **OpenCV DFT**.
 
 ---
 
@@ -47,7 +47,7 @@ $$\hat{F}(u,v) = \frac{H^*(u,v)}{|H(u,v)|^2 + K} \cdot G(u,v)$$
 inverse_filtering/
 ├── main.py        # Entry point — run this
 ├── blur.py        # PSF creation, motion blur, Gaussian noise
-├── restore.py     # Inverse filter & Wiener filter (TensorFlow FFT)
+├── restore.py     # Inverse filter & Wiener filter (OpenCV DFT)
 ├── utils.py       # Image I/O, PSNR/SSIM metrics, figure saving
 └── results/       # Output figures (generated on run)
 ```
@@ -81,7 +81,7 @@ The inverse filter collapses under even mild noise, demonstrating why regularisa
 ## Installation
 
 ```bash
-pip install tensorflow numpy scikit-image scipy matplotlib
+pip install opencv-python numpy scikit-image scipy matplotlib
 ```
 
 Python 3.9+ recommended.
@@ -91,7 +91,7 @@ Python 3.9+ recommended.
 ## Usage
 
 ```bash
-python main.py
+python3 main.py
 ```
 
 All tunable parameters are at the top of `main()` in [main.py](main.py):
@@ -111,7 +111,7 @@ WIENER_K    = 0.005   # Wiener NSR constant
 
 | Package | Purpose |
 |---------|---------|
-| `tensorflow` | FFT-based convolution and filtering |
+| `opencv-python` | DFT-based convolution, filtering, and image I/O |
 | `numpy` | Array operations |
 | `scikit-image` | Test image, PSNR/SSIM metrics |
 | `scipy` | PSF kernel rotation |

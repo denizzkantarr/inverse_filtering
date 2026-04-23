@@ -1,8 +1,12 @@
 """
 utils.py — Helper functions: image I/O, metrics, and result visualisation.
+
+OpenCV (cv2) is used for image loading and saving of raw grayscale arrays.
+Matplotlib is used for multi-panel comparison figures.
 """
 
 import os
+import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 from skimage import data, img_as_float
@@ -10,7 +14,7 @@ from skimage.metrics import peak_signal_noise_ratio as psnr
 from skimage.metrics import structural_similarity as ssim
 
 
-# ── image loading ──────────────────────────────────────────────────────────────
+# ── image loading / saving ─────────────────────────────────────────────────────
 
 def load_test_image() -> np.ndarray:
     """
@@ -20,6 +24,39 @@ def load_test_image() -> np.ndarray:
         image : 2-D float64 array with values in [0, 1].
     """
     return img_as_float(data.camera())
+
+
+def load_image_cv2(path: str) -> np.ndarray:
+    """
+    Load a grayscale image from disk using OpenCV and normalise to [0, 1].
+
+    Args:
+        path : File path to the image (JPEG, PNG, BMP, …).
+    Returns:
+        image : 2-D float64 array in [0, 1].
+    Raises:
+        FileNotFoundError : if the file does not exist.
+        ValueError        : if OpenCV cannot decode the file.
+    """
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"Image not found: {path}")
+    img = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
+    if img is None:
+        raise ValueError(f"cv2.imread could not decode: {path}")
+    return img.astype(np.float64) / 255.0
+
+
+def save_image_cv2(image: np.ndarray, path: str) -> None:
+    """
+    Save a [0, 1] float64 grayscale array to disk using OpenCV.
+
+    Args:
+        image : 2-D float64 array in [0, 1].
+        path  : Output file path (extension determines format).
+    """
+    img_uint8 = (np.clip(image, 0.0, 1.0) * 255).astype(np.uint8)
+    cv2.imwrite(path, img_uint8)
+    print(f"    Saved → {path}")
 
 
 def normalize_image(image: np.ndarray) -> np.ndarray:
@@ -197,18 +234,27 @@ def save_full_report(original: np.ndarray,
 
 def save_frequency_magnitude(image: np.ndarray, filename: str, title: str = "") -> None:
     """
-    Save a log-scale magnitude spectrum plot of an image.
+    Save a log-scale magnitude spectrum plot of an image using cv2.dft.
+
+    cv2.dft returns a two-channel [H, W, 2] array; cv2.magnitude() computes
+    the per-pixel magnitude sqrt(real² + imag²).  The DC component is shifted
+    to the centre with np.fft.fftshift for standard visualisation.
 
     Visualising the spectrum helps understand which frequencies the
     blur or restoration has affected.
 
     Args:
-        image    : 2-D float64 image.
+        image    : 2-D float64 image in [0, 1].
         filename : output file path.
         title    : optional axes title.
     """
-    spectrum = np.fft.fftshift(np.abs(np.fft.fft2(image)))
-    log_spectrum = np.log1p(spectrum)          # log(1 + |F|) for display
+    # Forward DFT via OpenCV
+    dft_2ch   = cv2.dft(image.astype(np.float64), flags=cv2.DFT_COMPLEX_OUTPUT)
+    magnitude = cv2.magnitude(dft_2ch[..., 0], dft_2ch[..., 1])
+
+    # Shift DC to centre and apply log compression for display
+    shifted      = np.fft.fftshift(magnitude)
+    log_spectrum = np.log1p(shifted)           # log(1 + |F|) avoids log(0)
 
     fig, ax = plt.subplots(figsize=(5, 5))
     ax.imshow(log_spectrum, cmap="inferno")
